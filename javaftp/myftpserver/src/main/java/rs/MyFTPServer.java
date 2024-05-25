@@ -26,7 +26,6 @@ public class MyFTPServer {
 
     public MyFTPServer(int port) {
 
-        PropertyConfigurator.configure(MyFTPServer.class.getResource("/log4J.properties"));
         FtpServerFactory serverFactory = new FtpServerFactory();
 
         System.out.println("Port: " + port);
@@ -60,9 +59,7 @@ public class MyFTPServer {
         BaseUser user = new BaseUser();
         user.setName("toto"); // Replace "username" with the desired username
         user.setPassword("tata"); // Replace "password" with the desired password
-        String username = user.getName();
-        String homeDirectory = System.getProperty("java.io.tmpdir") + "/lucaerbi/" + username;
-
+        String homeDirectory = Node.homeDirectory;
         File directory = new File(homeDirectory); // Convert the string to a File object
         if (!directory.exists()) { // Check if the directory exists
             if (directory.mkdirs()) {

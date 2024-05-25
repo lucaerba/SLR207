@@ -11,7 +11,8 @@ import java.util.Map;
 public class Node {
     private final static String MAP_MSG = "MAP";
     private final static String REDUCE_MSG = "REDUCE";
-
+    protected static String username = "toto";
+    protected static String homeDirectory = System.getProperty("java.io.tmpdir") + "/lucaerbi/" + username;
     public static void main(String[] args) {
         ServerSocket listener = null;
         String line;

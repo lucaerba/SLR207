@@ -1,5 +1,5 @@
 #!/bin/bash
-login="login"
+login="lerbi-23"
 localFolder="./"
 todeploy="myftpserver/target"
 remoteFolder="/dev/shm/$login/"
