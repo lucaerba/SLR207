@@ -1,7 +1,7 @@
 #!/bin/bash
 login="lerbi-23"
 localFolder="./"
-todeploy="myftpserver/target"
+todeploy="javaftp/myftpserver/target"
 remoteFolder="/dev/shm/$login/"
 nameOfTheJarToExecute="myftpserver-1-jar-with-dependencies.jar"
 #create a machines.txt file with the list of computers
@@ -15,11 +15,19 @@ for c in ${computers[@]}; do
   #this command copies the folder to the remote folder
   command1=("scp" "-r" "$localFolder$todeploy" "$login@$c:$remoteFolder")
   #this command goes to the remote folder, waits 3 seconds and executes the jar
-  command2=("ssh" "-tt" "$login@$c" "cd $remoteFolder;sleep 3; java -jar target/$nameOfTheJarToExecute")
+  command2=("ssh" "-tt" "$login@$c" "cd $remoteFolder; java -jar target/$nameOfTheJarToExecute")
   echo ${command0[*]}
   "${command0[@]}"
+  #system pause until one press
+  read -p "Press enter to continue"
   echo ${command1[*]}
   "${command1[@]}"
+  #system pause until one press
+  read -p "Press enter to continue"
+  
   echo ${command2[*]}
   "${command2[@]}" &
+  #system pause until one press
+  read -p "Press enter to continue"
+  
 done

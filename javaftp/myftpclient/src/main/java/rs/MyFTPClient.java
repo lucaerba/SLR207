@@ -14,8 +14,7 @@ public class MyFTPClient {
     public MyFTPClient() {
         ftpClient = new FTPClient();
     }
-
-    //save your part of the file on the server, taking into account the number of servers and the server number
+     //save your part of the file on the server, taking into account the number of servers and the server number
     public void saveFileOnServer( String server, int port, String filename, String content, long nServer, int i) {
         try {
             ftpClient.connect(server, port);
@@ -26,7 +25,7 @@ public class MyFTPClient {
             // Code to save file, take just the bytes you take care of (i.e. the i-th part)
             ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes());
 
-            System.out.println("Uploading file to server " + server + " part " + i + " of " + nServer);
+            System.out.println("Uploading file to server " + server + " part " + (i+1) + " of " + nServer);
             ftpClient.storeFile(filename + "_" + i + "_" + nServer, inputStream);
             int errorCode = ftpClient.getReplyCode();
 

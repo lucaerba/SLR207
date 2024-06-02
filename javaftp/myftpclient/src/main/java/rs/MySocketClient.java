@@ -20,19 +20,19 @@ public class MySocketClient {
     public void sendMsgToServer(String server, int port, String msg) {
         //create a socket to connect to the server
 
-            try (Socket socket = new Socket(server, port)) {
-                //create a buffered writer to write to the server
-                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-                //write the message to the server
-                writer.write(msg);
-                writer.newLine();
-                writer.flush();
-                //close the writer
-                writer.close();
-            }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
+        try (Socket socket = new Socket(server, port)) {
+            //create a buffered writer to write to the server
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+            //write the message to the server
+            writer.write(msg);
+            writer.newLine();
+            writer.flush();
+            //close the writer
+            writer.close();
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
 
     }
 

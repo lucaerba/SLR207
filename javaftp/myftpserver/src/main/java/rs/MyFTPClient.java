@@ -9,12 +9,21 @@ import java.io.*;
 public class MyFTPClient {
     private final static String username = "toto";
     private final static String password = "tata";
-
+    private String[] ips;
     private FTPClient ftpClient = null;
-    public MyFTPClient() {
+    public MyFTPClient(String ips[]) {
         ftpClient = new FTPClient();
+        this.ips = ips;
     }
 
+    public void saveResultsOnServers(String filename, String content) {
+        int nServer = ips.length;
+        for (int i = 0; i < nServer; i++) {
+            //split ip port
+            String[] ipPort = ips[i].split(":");
+            saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1]), filename, content, nServer, i);
+        }
+    }
     //save your part of the file on the server, taking into account the number of servers and the server number
     public void saveFileOnServer( String server, int port, String filename, String content, long nServer, int i) {
         try {

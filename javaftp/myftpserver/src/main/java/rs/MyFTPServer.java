@@ -25,7 +25,7 @@ public class MyFTPServer {
 
 
     public MyFTPServer(int port) {
-
+        PropertyConfigurator.configure(MyFTPServer.class.getResource("/log4J.properties"));
         FtpServerFactory serverFactory = new FtpServerFactory();
 
         System.out.println("Port: " + port);
