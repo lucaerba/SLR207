@@ -26,11 +26,13 @@
    <build>
     <plugins>
         <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
+            <version>3.3.0</version> <!-- Aggiungi la versione appropriata qui -->
             <configuration>
                 <archive>
                     <manifest>
-                        <mainClass>rs.MyFTPClient</mainClass>
+                        <mainClass>rs.Master</mainClass>
                     </manifest>
                 </archive>
                 <descriptorRefs>
@@ -39,14 +41,14 @@
             </configuration>
             <executions>
                 <execution>
-                    <id>make-assembly</id>
-                    <phase>package</phase>
-                    <goals>
-                        <goal>single</goal>
-                    </goals>
-                </execution>
-            </executions>
-        </plugin>
+            <id>make-assembly</id>
+            <phase>package</phase>
+            <goals>
+                <goal>single</goal>
+            </goals>
+        </execution>
+    </executions>
+</plugin>
         <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-compiler-plugin</artifactId>

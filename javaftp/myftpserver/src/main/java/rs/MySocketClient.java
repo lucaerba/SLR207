@@ -2,6 +2,7 @@ package rs;
 
 import java.io.*;
 import java.net.Socket;
+import java.net.ConnectException;
 
 public class MySocketClient {
     //create a class implementing the client side of the socket, to send, receive and display messages
@@ -20,19 +21,32 @@ public class MySocketClient {
     public void sendMsgToServer(String server, int port, String msg) {
         //create a socket to connect to the server
 
-            try (Socket socket = new Socket(server, port)) {
+        boolean connected = false;
+        Socket socket = null;
+        boolean first = true;
+        while (!connected) {
+            try{
+                socket = new Socket(server, port);
                 //create a buffered writer to write to the server
                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-                //write the message to the server
+                //write the message to the server  
                 writer.write(msg);
                 writer.newLine();
                 writer.flush();
                 //close the writer
                 writer.close();
+        
+                connected = true;
+                socket.close();
+            } catch (ConnectException e) {
+                if (first) {
+                    first = false;
+                    System.out.println("Connection refused. Retrying...");
+                }
+            } catch (Exception e) {
+                //e.printStackTrace();
             }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
+        }
 
     }
 

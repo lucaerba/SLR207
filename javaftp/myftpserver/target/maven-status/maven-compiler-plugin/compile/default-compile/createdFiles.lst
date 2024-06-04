@@ -1,1 +1,5 @@
+rs/MySocketServer.class
+rs/MyFTPClient.class
 rs/MyFTPServer.class
+rs/MySocketClient.class
+rs/Node.class

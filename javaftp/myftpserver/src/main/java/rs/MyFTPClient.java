@@ -5,13 +5,15 @@ import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
 
 import java.io.*;
+import java.util.stream.Stream;
 
 public class MyFTPClient {
     private final static String username = "toto";
     private final static String password = "tata";
     private String[] ips;
     private FTPClient ftpClient = null;
-    public MyFTPClient(String ips[]) {
+    
+    public MyFTPClient(String[] ips) {
         ftpClient = new FTPClient();
         this.ips = ips;
     }
@@ -21,11 +23,16 @@ public class MyFTPClient {
         for (int i = 0; i < nServer; i++) {
             //split ip port
             String[] ipPort = ips[i].split(":");
-            saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1]), filename, content, nServer, i);
+            //, send just the words with the hash % n_server == i
+            int finalI = i;
+            content = Stream.of(content.split(" "))
+                    .filter(word -> Math.abs(word.hashCode()) % nServer == finalI)
+                    .reduce("", (acc, word) -> acc + " " + word);
+            saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename, content);
         }
     }
     //save your part of the file on the server, taking into account the number of servers and the server number
-    public void saveFileOnServer( String server, int port, String filename, String content, long nServer, int i) {
+    public void saveFileOnServer( String server, int port, String filename, String content) {
         try {
             ftpClient.connect(server, port);
             ftpClient.login(username, password);
@@ -35,8 +42,8 @@ public class MyFTPClient {
             // Code to save file, take just the bytes you take care of (i.e. the i-th part)
             ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes());
 
-            System.out.println("Uploading file to server " + server + " part " + i + " of " + nServer);
-            ftpClient.storeFile(filename + "_" + i + "_" + nServer, inputStream);
+            System.out.println("Uploading file to server " + server);
+            ftpClient.storeFile(filename , inputStream);
             int errorCode = ftpClient.getReplyCode();
 
             if (errorCode != 226) {
