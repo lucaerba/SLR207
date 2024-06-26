@@ -305,7 +305,7 @@ public class Node {
                 }else if(line.equals(REDUCE2_MSG)) {
                     System.out.println("REDUCE2 message received");
 
-                    //sort the result by value and alfabetic order and send it to the client
+                    //sort the result by value and then by alfabethic key is same value and send it to the client
                     result = result.entrySet().stream()
                             .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
                                     .thenComparing(Map.Entry.comparingByKey()))

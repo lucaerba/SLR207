@@ -201,7 +201,7 @@ public class Master {
         //got the range of fmin and fmax, divide the range into n_server groups {fmin, n_server-1 groups} and send all the groups to all the machines
         int[] ranges = new int[n_server+1];
         ranges[0] = fmin_min;
-        ranges[n_server] = fmax_max;
+        ranges[n_server] = fmax_max+1;
         int range = (fmax_max - fmin_min+1) / n_server;
         for (int i = 1; i < n_server; i++) {
             ranges[i] = ranges[i-1] + range;
