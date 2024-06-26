@@ -39,15 +39,17 @@ public class Master {
             if (!fileExists) {
                 System.out.println("File does not exist. Creating file.");
 
-                String content = "car cat dog dog cat dog car cat dog car cat car dog cat cat";
+                String content = "dog cat car tree house bike cat dog car tree car cat dog bike tree house car cat dog tree bike house car dog cat bike tree house cat dog car tree bike house cat dog car tree bike house cat dog car tree bike house";
 
-                saveFile(n_server, lines, ftpClient, "bonjour.txt", content);
+                saveFile(n_server, lines, ftpClient, filename, content);
             }
-            
+            splitTime = System.currentTimeMillis()-startTime;
+            System.out.println("file split: " + splitTime + "ms");
+
             //send ip addresses to the others
             //nserver
             send_ips(n_server, lines);
-            ipsTime = System.currentTimeMillis()-startTime;
+            ipsTime = System.currentTimeMillis()-startTime-splitTime;
             System.out.println("ips sent: " + ipsTime + "ms");
 
             //socket to start mapping process
@@ -55,10 +57,14 @@ public class Master {
 
             //wait for results
             wait_for_mapping(n_server);
-    
+            map1Time = System.currentTimeMillis()-startTime-ipsTime;
+            System.out.println("mapping done: " + map1Time + "ms");
+
             ask_for_reduce(n_server, lines);
 
             wait_for_reduce_send_groups(n_server, lines);
+            reduceTime = System.currentTimeMillis()-startTime-map1Time;
+            System.out.println("reduce done: " + reduceTime + "ms");
 
             wait_for_shuffle(n_server, lines);
 
@@ -230,7 +236,7 @@ public class Master {
 
                 //create a socket to connect to the server, send the number of servers
 
-                socket.sendMsgToServer(server, port, "IPSN " + n_server );
+                socket.sendMsgToServer(server, port, "IPSN " + n_server + " " + i );
                 for(int j=0; j<n_server; j++) {
                     if(j != i) {
                         String msg = "IPSI " + lines.get(j);
@@ -305,8 +311,12 @@ public class Master {
                 String server = parts[0];
                 int port = Integer.parseInt(parts[1]);
                 port += 100;
-                //take just the content we are responsible for
-                String content_part = content.substring(i*content.length()/n_server, (i+1)*content.length()/n_server);
+                //take just the content we are responsible for taking all the i+n words
+                String content_part = "";
+                String[] words = content.split(" ");
+                for (int j = i; j < words.length; j += n_server) {
+                    content_part += words[j] + " ";
+                }
                 System.out.println("saving " + content_part);
                 ftpClient.saveFileOnServer(server, port, filename, content_part, n_server, i);
             }

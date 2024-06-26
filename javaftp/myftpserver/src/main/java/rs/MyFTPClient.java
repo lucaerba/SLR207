@@ -18,7 +18,7 @@ public class MyFTPClient {
         this.ips = ips;
     }
 
-    public void saveResultsOnServers(String filename, String content) {
+    public void saveResultsOnServers(String filename, String content, int server_index) {
         int nServer = ips.length;
         for (int i = 0; i < nServer; i++) {
             //split ip port
@@ -26,7 +26,7 @@ public class MyFTPClient {
             //, send just the words with the hash % n_server == i
             int finalI = i;
             content = Stream.of(content.split(" "))
-                    .filter(word -> Math.abs(word.hashCode()) % nServer == finalI)
+                    .filter(word -> word.hashCode() % nServer == finalI)
                     .reduce("", (acc, word) -> acc + " " + word);
             saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename, content);
         }

@@ -3,13 +3,19 @@ package rs;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Node {
+    private final static boolean DEBUG = true;
     private final static String MAP_MSG = "MAP";
     private final static String REDUCE_MSG = "REDUCE";
     private final static String REDUCE2_MSG = "REDUCE2s";
@@ -31,8 +37,9 @@ public class Node {
         String[] ips = null;
         String clientip = null;
         int clientport = 1234;
-        List<Map.Entry<String, Integer>> result = null;
+        Map<String, Integer> result = null;
         int low_range, high_range; //[low_range, high_range)
+        int server_index = -1;
         // Try to open a server socket on port 9999
         // Note that we can't choose a port less than 1023 if we are not
         // privileged users (root)
@@ -73,16 +80,68 @@ public class Node {
 
                     String filename = line.split(" ")[1];
                     filename = homeDirectory + "/" + filename;
+
                     result = my_map(filename);
+                    
                     System.out.println("mapping " + filename + " result: " + result.size() + " words");
                     //write the results to the others servers using the ftp client
                     StringBuilder content = new StringBuilder();
-                    for (Map.Entry<String, Integer> stringIntegerEntry : result) {
+                    for (Map.Entry<String, Integer> stringIntegerEntry : result.entrySet()) {
                         content.append(stringIntegerEntry.getKey()).append(" ").append(stringIntegerEntry.getValue()).append("\n");
                     }
+                    //just keep
                     String name_file = filename.split("/")[filename.split("/").length-1];
-                    ftpClient.saveResultsOnServers(name_file, content.toString());
-                   
+                    name_file = name_file.split("_")[0];
+                    name_file += ("_shuffle_") ;
+                    ftpClient.saveResultsOnServers(name_file+server_index, content.toString(), server_index);
+                    //filter result and keep only the words that hash % n_server == i
+
+                    final int nServer = n_server;
+                    final int iServer = server_index;
+                    if(DEBUG){
+                        System.out.println("Result: ");
+                        //print the map result
+                        for (Map.Entry<String, Integer> stringIntegerEntry : result.entrySet()) {
+                            System.out.println(stringIntegerEntry.getKey() + " " + stringIntegerEntry.getValue());
+                        }
+                    }
+
+                    result = result.entrySet().stream()
+                            .filter(entry -> entry.getKey().hashCode() % nServer == iServer)
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+                    if(DEBUG){
+                        System.out.println("Result: ");
+                        //print the map result
+                        for (Map.Entry<String, Integer> stringIntegerEntry : result.entrySet()) {
+                            System.out.println(stringIntegerEntry.getKey() + " " + stringIntegerEntry.getValue());
+                        }
+                    }
+                    //get the others string from the others server reading filne name_file
+                    for(int i=0; i<n_server; i++) {
+                        if(i == server_index) continue;
+                        String wait_file_name = name_file + i;
+                        Path filePath = Paths.get(homeDirectory + "/" + wait_file_name);
+                        System.out.println("Waiting for file " + filePath.toString());
+                        while(!Files.exists(filePath));
+                        //append to results
+                        Map<String, Integer> newMap = my_map(filePath.toString());
+                        for (String key : newMap.keySet()) {
+                            if (result.containsKey(key)) {
+                                // If the key exists, add the new value to the existing value
+                                result.put(key, result.get(key) + newMap.get(key));
+                            } else {
+                                // If the key doesn't exist, just put the new value
+                                result.put(key, newMap.get(key));
+                            }
+                        }
+                    }
+                    if(DEBUG){
+                        System.out.println("Result: ");
+                        for (Map.Entry<String, Integer> stringIntegerEntry : result.entrySet()) {
+                            System.out.println(stringIntegerEntry.getKey() + " " + stringIntegerEntry.getValue());
+                        }
+                    }
                     socketClient.sendMsgToServer(clientip, clientport, "FINISHED");
                     System.out.println("MAP finished");
                     
@@ -91,7 +150,7 @@ public class Node {
                     //calculate fmin and fmax from the frequency list [key:occurrences]
                     int fmin = Integer.MAX_VALUE;
                     int fmax = Integer.MIN_VALUE;
-                    for (Map.Entry<String, Integer> stringIntegerEntry : result) {
+                    for (Map.Entry<String, Integer> stringIntegerEntry : result.entrySet()) {
                         int value = stringIntegerEntry.getValue();
                         if (value < fmin) {
                             fmin = value;
@@ -103,9 +162,6 @@ public class Node {
                     System.out.println("fmin: " + fmin + " fmax: " + fmax);
                     //take from all the files (local file, filename up to .txt_i_n_server) the words with hash % n_server == i and keep them as result
 
-
-
-
                     //send the result to the client
                     socketClient.sendMsgToServer(clientip, clientport, "" + fmin + " " + fmax);
 
@@ -113,9 +169,11 @@ public class Node {
                     System.out.println("IPS message received n");
                     //get the ips of the other servers
                     String serverCountLine = line.split(" ")[1];
+                    String indexLine = line.split(" ")[2];
                     //clientip = line.split(" ")[2];
                     n_server = Integer.parseInt(serverCountLine);
-                    System.out.println("Number of servers: " + n_server);
+                    server_index = Integer.parseInt(indexLine);
+                    System.out.println("Number of servers: " + n_server + " my index: " + server_index);
                     ips = new String[n_server-1];
                     n_server = 0;
 
@@ -138,13 +196,15 @@ public class Node {
 
                     System.out.println("Mine frequencies between " + low_range + " and " + high_range);
 
-                    //do the shuffle (i dont know of what)
+                    //do the shuffle, keep words with frequency between low_range and high_range and send the others to the other servers
+
 
 
                     //send shuffle2 finished to the client
                     socketClient.sendMsgToServer(clientip, clientport, "SHUFFLE2 FINISHED");
                 }else if(line.equals(REDUCE2_MSG)) {
                     System.out.println("REDUCE2 message received");
+
                     
                 }else {
                     System.out.println("Message received: " + line);
@@ -161,7 +221,7 @@ public class Node {
 
 
     // return a list of string occurrencies
-    private static List<Map.Entry<String, Integer>> my_map(String filename) {
+    private static Map<String, Integer> my_map(String filename) {
         HashMap<String, Integer> wordCount = new HashMap<>();
         try {
             BufferedReader reader = new BufferedReader(new FileReader(filename));
@@ -178,6 +238,6 @@ public class Node {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        return new ArrayList<>(wordCount.entrySet());
+        return wordCount;
     }
 }
