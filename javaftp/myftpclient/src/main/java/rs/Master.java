@@ -39,7 +39,7 @@ public class Master {
             if (!fileExists) {
                 System.out.println("File does not exist. Creating file.");
 
-                String content = "dog cat car tree house bike cat dog car tree car cat dog bike tree house car cat dog tree bike house car dog cat bike tree house cat dog car tree bike house cat dog car tree bike house cat dog car tree bike house";
+                String content = "Talent she for lively eat led sister. Entrance strongly packages she out rendered get quitting denoting led. Dwelling confined improved it he no doubtful raptures. Several carried through an of up attempt gravity. Situation to be at offending elsewhere distrusts if. Particular use for considered projection cultivated. Worth of do doubt shall it their. Extensive existence up me contained he pronounce do. Excellence inquietude assistance precaution any impression man sufficient. Call park out she wife face mean. Invitation excellence imprudence understood it continuing to. Ye show done an into. Fifteen winding related may hearted colonel are way studied. County suffer twenty or marked no moment in he. Meet shew or said like he. Valley silent cannot things so remain oh to elinor. Far merits season better tended any age hunted.";
 
                 saveFile(n_server, lines, ftpClient, filename, content);
             }
@@ -67,10 +67,16 @@ public class Master {
             System.out.println("reduce done: " + reduceTime + "ms");
 
             wait_for_shuffle(n_server, lines);
+            shuffleTime = System.currentTimeMillis()-startTime-reduceTime;
+            System.out.println("shuffle done: " + shuffleTime + "ms");
 
             ask_for_reduce2(n_server, lines);
+            reduce2Time = System.currentTimeMillis()-startTime-shuffleTime;
+            System.out.println("reduce2 done: " + reduce2Time + "ms");
 
-            wait_and_merge(n_server, lines, results);
+            wait_and_merge(n_server);
+            endTime = System.currentTimeMillis()-startTime-reduce2Time;
+            System.out.println("merge done: " + endTime + "ms");
 
             // Code to retrieve and display file content
             //System.out.println("File exists. Displaying file content.");
@@ -81,26 +87,36 @@ public class Master {
         }
     }
 
-    private static void wait_and_merge(int nServer, List<String> lines, List<Map.Entry<String, Integer>> results) {
+    private static void wait_and_merge(int nServer) {
         //wait for all the results to arrive and merge them into a single list to create a file with that
         try {
             System.out.println("n_server: " + nServer);
-            String line = null;
+ 
             ServerSocket socket = new ServerSocket(1234);
+            File file = new File("output.txt");
+            FileWriter writer = new FileWriter(file);
 
             for (int i = 0; i < nServer; i++) {
                 while(true) {
                     Socket s = socket.accept();
                     BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
                     String msg = is.readLine();
+                    System.out.println("msg: " + msg);
                     if (msg.contains("FINISHED")) {
                         System.out.println("Server " + s.getInetAddress() + " finished reduce2");
+                       
+                        while((msg=is.readLine()) != null){
+                        
+                            writer.write(msg);
+                            System.out.println(msg);
+                        }
                         break;
                     }
                 }
             }
 
             socket.close();
+            writer.close();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -182,22 +198,34 @@ public class Master {
                 e.printStackTrace();
             }
         }
-        //got the range of fmin and fmax, divide the range into n_server groups
-        int range = fmax_max - fmin_min + 1;
-        int group_size = range / n_server;
-        int group_start = fmin_min;
-        int group_end = fmin_min + group_size;
-        for (int i = 0; i < n_server; i++) {
-            String line = lines.get(i);
-            String[] parts = line.split(":");
-            String server = parts[0];
-            int port = Integer.parseInt(parts[1]);
-            System.out.println("Sending group " + i + " to server " + server + " on port " + port);
-            MySocketClient send = new MySocketClient();
-            send.sendMsgToServer(server, port, "GROUP " + group_start + " " + group_end);
-            group_start = group_end;
-            group_end = group_start + group_size;
+        //got the range of fmin and fmax, divide the range into n_server groups {fmin, n_server-1 groups} and send all the groups to all the machines
+        int[] ranges = new int[n_server+1];
+        ranges[0] = fmin_min;
+        ranges[n_server] = fmax_max;
+        int range = (fmax_max - fmin_min+1) / n_server;
+        for (int i = 1; i < n_server; i++) {
+            ranges[i] = ranges[i-1] + range;
         }
+        String msg = "GROUPS ";
+        System.out.println("Ranges: ");
+        for (int j = 0; j < n_server+1; j++) {
+            msg += ranges[j] + " ";
+            System.out.println(ranges[j]);
+        }
+        try {
+            for (int i = 0; i < n_server; i++) {
+                String line = lines.get(i);
+                String[] parts = line.split(":");
+                String server = parts[0];
+                int port = Integer.parseInt(parts[1]);
+                MySocketClient send = new MySocketClient();
+                send.sendMsgToServer(server, port, msg);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
        
     }
 
@@ -238,10 +266,9 @@ public class Master {
 
                 socket.sendMsgToServer(server, port, "IPSN " + n_server + " " + i );
                 for(int j=0; j<n_server; j++) {
-                    if(j != i) {
-                        String msg = "IPSI " + lines.get(j);
-                        socket.sendMsgToServer(server, port, msg);
-                    }
+                    String msg = "IPSI " + lines.get(j);
+                    socket.sendMsgToServer(server, port, msg);
+
                 }
             }
         } catch (Exception e) {

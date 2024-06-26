@@ -18,7 +18,7 @@ public class Node {
     private final static boolean DEBUG = true;
     private final static String MAP_MSG = "MAP";
     private final static String REDUCE_MSG = "REDUCE";
-    private final static String REDUCE2_MSG = "REDUCE2s";
+    private final static String REDUCE2_MSG = "REDUCE2";
     private final static String IP_MSG_N = "IPSN";
     private final static String IP_MSG_IP = "IPSI";
     private final static String GROUP_MSG = "GROUP";
@@ -40,6 +40,8 @@ public class Node {
         Map<String, Integer> result = null;
         int low_range, high_range; //[low_range, high_range)
         int server_index = -1;
+        int[] ranges = null;
+        String filename = null;
         // Try to open a server socket on port 9999
         // Note that we can't choose a port less than 1023 if we are not
         // privileged users (root)
@@ -78,24 +80,13 @@ public class Node {
                 if(line.contains(MAP_MSG)) {
                     System.out.println("MAP message received");
 
-                    String filename = line.split(" ")[1];
+                    filename = line.split(" ")[1];
                     filename = homeDirectory + "/" + filename;
 
                     result = my_map(filename);
                     
                     System.out.println("mapping " + filename + " result: " + result.size() + " words");
-                    //write the results to the others servers using the ftp client
-                    StringBuilder content = new StringBuilder();
-                    for (Map.Entry<String, Integer> stringIntegerEntry : result.entrySet()) {
-                        content.append(stringIntegerEntry.getKey()).append(" ").append(stringIntegerEntry.getValue()).append("\n");
-                    }
-                    //just keep
-                    String name_file = filename.split("/")[filename.split("/").length-1];
-                    name_file = name_file.split("_")[0];
-                    name_file += ("_shuffle_") ;
-                    ftpClient.saveResultsOnServers(name_file+server_index, content.toString(), server_index);
-                    //filter result and keep only the words that hash % n_server == i
-
+                    
                     final int nServer = n_server;
                     final int iServer = server_index;
                     if(DEBUG){
@@ -106,11 +97,25 @@ public class Node {
                         }
                     }
 
+                    //just keep
+                    String name_file = filename.split("/")[filename.split("/").length-1];
+                    name_file = name_file.split("_")[0];
+                    name_file += ("_shuffle_") ;
+                    ftpClient.saveResultsOnServers_hash(name_file+server_index, result, server_index);
+                    //filter result and keep only the words that hash % n_server == i
+                    if(DEBUG){
+                        //print all hascodesof the words
+                        for (String key : result.keySet()) {
+                            System.out.println(key + " " + key.hashCode() % nServer);
+                        }
+                    }
+                    
                     result = result.entrySet().stream()
                             .filter(entry -> entry.getKey().hashCode() % nServer == iServer)
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
                     if(DEBUG){
+                        System.out.println("N_server: " + n_server + " Server_index: " + server_index);
                         System.out.println("Result: ");
                         //print the map result
                         for (Map.Entry<String, Integer> stringIntegerEntry : result.entrySet()) {
@@ -124,16 +129,40 @@ public class Node {
                         Path filePath = Paths.get(homeDirectory + "/" + wait_file_name);
                         System.out.println("Waiting for file " + filePath.toString());
                         while(!Files.exists(filePath));
-                        //append to results
-                        Map<String, Integer> newMap = my_map(filePath.toString());
-                        for (String key : newMap.keySet()) {
-                            if (result.containsKey(key)) {
-                                // If the key exists, add the new value to the existing value
-                                result.put(key, result.get(key) + newMap.get(key));
-                            } else {
-                                // If the key doesn't exist, just put the new value
-                                result.put(key, newMap.get(key));
+                     // Serialize the map
+                        try {
+                            BufferedReader reader = new BufferedReader(new FileReader(filePath.toString()));
+                            String line2;
+                            while ((line2 = reader.readLine()) != null) {
+                                // Deserialize the map
+                                if(DEBUG){
+                                    System.out.println("Line: " + line2);
+                                }
+                                line2 = line2.substring(1, line2.length() - 1); // Remove the curly braces
+                                String[] keyValuePairs = line2.split(",");
+                                for (String pair : keyValuePairs) {
+                                    
+                                    pair = pair.trim(); // Trim any leading or trailing whitespace
+                                    if (pair.contains("=")) {
+                                        
+                                        String[] entry = pair.split("=");
+                                        String key = entry[0].trim();
+                                        int value = Integer.parseInt(entry[1].trim());
+                                        // If exists, add the new value to the existing value
+                                        if (result.containsKey(key)) {
+                                            result.put(key, result.get(key) + value);
+                                        } else {
+                                            // If doesn't exist, just put the new value
+                                            result.put(key, value);
+                                        }
+                                    } else {
+                                        System.err.println("Skipping invalid pair: " + pair);
+                                    }
+                                }
                             }
+                            reader.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
                     }
                     if(DEBUG){
@@ -174,7 +203,7 @@ public class Node {
                     n_server = Integer.parseInt(serverCountLine);
                     server_index = Integer.parseInt(indexLine);
                     System.out.println("Number of servers: " + n_server + " my index: " + server_index);
-                    ips = new String[n_server-1];
+                    ips = new String[n_server];
                     n_server = 0;
 
                 }else if(line.contains(IP_MSG_IP)) {
@@ -186,18 +215,89 @@ public class Node {
                     if (n_server == ips.length) {
                         ftpClient = new MyFTPClient(ips);
                         clientip = socketOfServer.getInetAddress().getHostAddress();
+                        if(DEBUG){
+                            System.out.println("Client IP: " + clientip);
+                        }
+                        if(DEBUG){
+                            System.out.println("IPs: ");
+                            for (String ip : ips) {
+                                System.out.println(ip);
+                            }
+                        }
                     }
+                    
                 }else if(line.contains(GROUP_MSG)) {
                     System.out.println("GROUP message received");
                     //get the ranges GRPOUP fmin fmax
-                    String[] ranges = line.split(" ");
-                    low_range = Integer.parseInt(ranges[1]);
-                    high_range = Integer.parseInt(ranges[2]);
+                    String[] range_s = line.split(" ");
+                    ranges = new int[range_s.length-1];
+                    for(int i=1; i<range_s.length; i++) {
+                        ranges[i-1] = Integer.parseInt(range_s[i]);
+                    }
+                    low_range = ranges[server_index];
+                    high_range = ranges[server_index+1];
 
                     System.out.println("Mine frequencies between " + low_range + " and " + high_range);
 
                     //do the shuffle, keep words with frequency between low_range and high_range and send the others to the other servers
+                    //serialize the map
+                    
+                    String name_file = filename.split("/")[filename.split("/").length-1];
+                    name_file = name_file.split("_")[0];
+                    name_file += ("_shuffle_2") ;
+                    
+                    ftpClient.saveResultsOnServers_range(name_file+server_index, result, server_index, ranges);
 
+
+                    final int flow_range = low_range;
+                    final int fhigh_range = high_range;
+                    result = result.entrySet().stream()
+                            .filter(entry -> entry.getValue() >= flow_range && entry.getValue() < fhigh_range)
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+                    //wait for the other files
+                    for(int i=0; i<n_server; i++) {
+                        if(i == server_index) continue;
+                        String wait_file_name = name_file + i;
+                        Path filePath = Paths.get(homeDirectory + "/" + wait_file_name);
+                        System.out.println("Waiting for file " + filePath.toString());
+                        while(!Files.exists(filePath));
+                        // Serialize the map
+                        try {
+                            BufferedReader reader = new BufferedReader(new FileReader(filePath.toString()));
+                            String line2;
+                            while ((line2 = reader.readLine()) != null) {
+                                // Deserialize the map
+                                if(DEBUG){
+                                    System.out.println("Line: " + line2);
+                                }
+                                line2 = line2.substring(1, line2.length() - 1); // Remove the curly braces
+                                String[] keyValuePairs = line2.split(",");
+                                for (String pair : keyValuePairs) {
+                                    
+                                    pair = pair.trim(); // Trim any leading or trailing whitespace
+                                    if (pair.contains("=")) {
+                                        
+                                        String[] entry = pair.split("=");
+                                        String key = entry[0].trim();
+                                        int value = Integer.parseInt(entry[1].trim());
+                                        // If exists, add the new value to the existing value
+                                        if (result.containsKey(key)) {
+                                            result.put(key, result.get(key) + value);
+                                        } else {
+                                            // If doesn't exist, just put the new value
+                                            result.put(key, value);
+                                        }
+                                    } else {
+                                        System.err.println("Skipping invalid pair: " + pair);
+                                    }
+                                }
+                            }
+                            reader.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
 
 
                     //send shuffle2 finished to the client
@@ -205,7 +305,16 @@ public class Node {
                 }else if(line.equals(REDUCE2_MSG)) {
                     System.out.println("REDUCE2 message received");
 
-                    
+                    //sort the result by value and alfabetic order and send it to the client
+                    result = result.entrySet().stream()
+                            .sorted(Map.Entry.<String, Integer>comparingByValue().reversed()
+                                    .thenComparing(Map.Entry.comparingByKey()))
+                            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                                    (e1, e2) -> e1, HashMap::new));
+
+                    //send the result to the client
+                    socketClient.sendMsgToServer(clientip, clientport, "FINISHED\n"+result.toString());
+
                 }else {
                     System.out.println("Message received: " + line);
                 } 
@@ -227,6 +336,8 @@ public class Node {
             BufferedReader reader = new BufferedReader(new FileReader(filename));
             String line;
             while ((line = reader.readLine()) != null) {
+                //remove punctuation, its not just latin alphabet so just take out all puntuation
+
                 String[] words = line.split(" ");
                 for (String word : words) {
                     wordCount.put(word, wordCount.getOrDefault(word, 0) + 1);
