@@ -117,7 +117,6 @@ public class Node {
 
                     System.out.println("mapping " + filename + " result: " + result.size() + " words");
 
-
                     if (DEBUG) {
                         System.out.println("Result: ");
                         //print the map result
@@ -296,18 +295,16 @@ public class Node {
                 }else if(line.equals(REDUCE2_MSG)) {
                     System.out.println("REDUCE2 message received");
 
-                    Map<String, Integer> sortedResult = result.entrySet()
-                        .stream()
-                        .sorted(Comparator.comparing((Map.Entry<String, Integer> entry) -> entry.getValue())
-                                .thenComparing(Map.Entry::getKey))
-                        .collect(Collectors.toMap(
-                                Map.Entry::getKey,
-                                Map.Entry::getValue,
-                                (e1, e2) -> e1,
-                                LinkedHashMap::new));
                     //format like key value\n
-                    String result_string = sortedResult.entrySet().stream()
-                            .map(entry -> entry.getKey() + " " + entry.getValue() + "\n")
+                    String result_string = result.entrySet()
+                        .stream().sorted(Comparator.comparing((Map.Entry<String, Integer> entry) -> entry.getValue())
+                            .thenComparing(Map.Entry::getKey))
+                        .collect(Collectors.toMap(
+                            Map.Entry::getKey,
+                            Map.Entry::getValue,
+                            (e1, e2) -> e1,
+                            LinkedHashMap::new)).entrySet()
+                        .stream().map(entry -> entry.getKey() + " " + entry.getValue() + "\n")
                             .collect(Collectors.joining());
                     
                     //send the result to the client

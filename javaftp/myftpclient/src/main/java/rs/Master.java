@@ -20,114 +20,125 @@ public class Master {
     private static MyFTPClient ftpClient = null;
 
     public static void main(String[] args) {
-        //create a timer to mesure the execution time and the different subtimes
-        long time, time_before, startTime, splitTime, ipsTime, map1Time, map2Time, reduceTime, shuffleTime, reduce2Time, endTime;
-        startTime = System.currentTimeMillis();
-        int n_server = 0;
-        List<String> lines = null;
-        int n_files = 1;
-        //int n_files = args.length > 0 ? Integer.parseInt(args[0]) : 1;
-        n_server = 3;
-        //just read n_machines from the server_list
-        try (BufferedReader reader = new BufferedReader(new FileReader(SERVER_LIST))) {
-            lines = reader.lines().collect(Collectors.toList());
-            lines = lines.subList(0, n_server);
+        for(int i=2; i<14; i+=1){
+            for(int j=1; j<8; j+=1){
 
-        } catch (IOException e1) {
-            // TODO Auto-generated catch block
-            e1.printStackTrace();
-        }
-        //start the timer
-        
+                System.out.println("---- n_server: " + i + " n_files: " + j+ " ----");
+               //create a timer to mesure the execution time and the different subtimes
+                long time, time_before, startTime, splitTime, ipsTime, map1Time, map2Time, reduceTime, shuffleTime, shuffleTime1, reduce2Time, endTime;
+                startTime = System.currentTimeMillis();
+                int n_server = i;
+                List<String> lines = null;
+                int n_files = j;
+                //int n_files = args.length > 0 ? Integer.parseInt(args[0]) : 1;
 
-        String dirPath = "/cal/commoncrawl";
-        List<Map.Entry<String, Integer>> results = null;
-        ftpClient = new MyFTPClient();
-        try {
-            //boolean filesExist = checkFileExists(ftpClient, dirPath);
-            boolean filesExist = false;
-            String[] filenames = new String[n_files];
-            if (!filesExist) {
-                System.out.println("Files do not exist. Creating and splitting files.");
+                //just read n_machines from the server_list
+                try (BufferedReader reader = new BufferedReader(new FileReader(SERVER_LIST))) {
+                    lines = reader.lines().collect(Collectors.toList());
+                    lines = lines.subList(0, n_server);
 
-                readAllFilesInDirectory( n_server, lines, dirPath, n_files, filenames);
+                } catch (IOException e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                }
+                //start the timer
                 
+
+                String dirPath = "/cal/commoncrawl";
+                List<Map.Entry<String, Integer>> results = null;
+                ftpClient = new MyFTPClient();
+                try {
+                    //boolean filesExist = checkFileExists(ftpClient, dirPath);
+                    boolean filesExist = false;
+                    String[] filenames = new String[n_files];
+                    if (!filesExist) {
+                        System.out.println("Files do not exist. Creating and splitting files.");
+
+                        readAllFilesInDirectory( n_server, lines, dirPath, n_files, filenames);
+                        
+                    }
+                    splitTime = System.currentTimeMillis()-startTime;
+                    System.out.println("file split: " + splitTime + "ms");
+
+                    //send ip addresses to the others
+                    //nserver
+                    time_before = System.currentTimeMillis();
+                    send_ips(n_server, lines);
+                    time = System.currentTimeMillis();
+                    ipsTime = time - time_before;
+                    System.out.println("ips sent: " + ipsTime + "ms");
+
+                    time_before = System.currentTimeMillis();
+                    //socket to start mapping process
+                    ask_for_mapping(n_server, lines, filenames);
+
+                    //wait for results
+                    wait_for_mapping(n_server, filenames);
+                    time = System.currentTimeMillis();
+                    map1Time = time - time_before;
+                    System.out.println("map1 done: " + map1Time + "ms");
+
+                    time_before = System.currentTimeMillis();
+                    ask_for_shuffle(n_server, lines);
+                    //wait for results
+                    wait_for_shuffle(n_server, lines, "SHUFFLE FINISHED");
+
+                    time = System.currentTimeMillis();
+                    shuffleTime1 = time - time_before;
+                    System.out.println("shuffle1 done: " + shuffleTime1 + "ms");
+
+                    time_before = System.currentTimeMillis();
+                    ask_for_reduce(n_server, lines);
+
+                    wait_for_reduce_send_groups(n_server, lines);
+                    time = System.currentTimeMillis();
+                    reduceTime = time - time_before;
+                    System.out.println("reduce done: " + reduceTime + "ms");
+
+                    time_before = System.currentTimeMillis();
+                    wait_for_shuffle(n_server, lines, "SHUFFLE2 FINISHED");
+                    time = System.currentTimeMillis();
+                    shuffleTime = time - time_before;
+                    System.out.println("shuffle2 done: " + shuffleTime + "ms");
+
+                    time_before = System.currentTimeMillis();
+                    ask_for_reduce2(n_server, lines);
+                    time = System.currentTimeMillis();
+                    reduce2Time = time - time_before;
+                    System.out.println("reduce2 done: " + reduce2Time + "ms");
+
+                    time_before = System.currentTimeMillis();
+                    wait_and_merge(n_server, lines);
+                    time = System.currentTimeMillis();
+                    endTime = time - time_before;
+                    System.out.println("merge done: " + endTime + "ms");
+
+                    // Code to retrieve and display file content
+                    //System.out.println("File exists. Displaying file content.");
+                    //append to the time file the times
+                    try {
+                        FileWriter writer = new FileWriter("times.txt", true);
+                        writer.write("---- n_server: " + n_server +" n_files: " + n_files +" ----\n");
+                        writer.write("split: " + splitTime + "\n");
+                        writer.write("ips: " + ipsTime + "\n");
+                        writer.write("map1: " + map1Time + "\n");
+                        writer.write("shuffle1: " + shuffleTime1 + "\n");
+                        writer.write("reduce: " + reduceTime + "\n");
+                        writer.write("shuffle: " + shuffleTime + "\n");
+                        writer.write("reduce2: " + reduce2Time + "\n");
+                        writer.write("merge: " + endTime + "\n");
+                        writer.write("total time: " + (endTime + reduce2Time + shuffleTime + reduceTime + map1Time + ipsTime + splitTime + shuffleTime1) + "\n");
+                        writer.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
-            splitTime = System.currentTimeMillis()-startTime;
-            System.out.println("file split: " + splitTime + "ms");
-
-            //send ip addresses to the others
-            //nserver
-            time_before = System.currentTimeMillis();
-            send_ips(n_server, lines);
-            time = System.currentTimeMillis();
-            ipsTime = time - time_before;
-            System.out.println("ips sent: " + ipsTime + "ms");
-
-            time_before = System.currentTimeMillis();
-            //socket to start mapping process
-            ask_for_mapping(n_server, lines, filenames);
-
-            //wait for results
-            wait_for_mapping(n_server, filenames);
-
-
-            ask_for_shuffle(n_server, lines);
-            //wait for results
-            wait_for_shuffle(n_server, lines, "SHUFFLE FINISHED");
-
-            time = System.currentTimeMillis();
-            map1Time = time - time_before;
-            System.out.println("mapping done: " + map1Time + "ms");
-
-            time_before = System.currentTimeMillis();
-            ask_for_reduce(n_server, lines);
-
-            wait_for_reduce_send_groups(n_server, lines);
-            time = System.currentTimeMillis();
-            reduceTime = time - time_before;
-            System.out.println("reduce done: " + reduceTime + "ms");
-
-            time_before = System.currentTimeMillis();
-            wait_for_shuffle(n_server, lines, "SHUFFLE2 FINISHED");
-            time = System.currentTimeMillis();
-            shuffleTime = time - time_before;
-            System.out.println("shuffle done: " + shuffleTime + "ms");
-
-            time_before = System.currentTimeMillis();
-            ask_for_reduce2(n_server, lines);
-            time = System.currentTimeMillis();
-            reduce2Time = time - time_before;
-            System.out.println("reduce2 done: " + reduce2Time + "ms");
-
-            time_before = System.currentTimeMillis();
-            wait_and_merge(n_server, lines);
-            time = System.currentTimeMillis();
-            endTime = time - time_before;
-            System.out.println("merge done: " + endTime + "ms");
-
-            // Code to retrieve and display file content
-            //System.out.println("File exists. Displaying file content.");
-            //append to the time file the times
-            try {
-                FileWriter writer = new FileWriter("times.txt", true);
-                writer.write("n_files: " + n_files +"\n");
-                writer.write("split: " + splitTime + "\n");
-                writer.write("ips: " + ipsTime + "\n");
-                writer.write("map1: " + map1Time + "\n");
-                writer.write("reduce: " + reduceTime + "\n");
-                writer.write("shuffle: " + shuffleTime + "\n");
-                writer.write("reduce2: " + reduce2Time + "\n");
-                writer.write("merge: " + endTime + "\n");
-                writer.write("total time: " + (endTime + reduce2Time + shuffleTime + reduceTime + map1Time + ipsTime + splitTime) + "\n");
-                writer.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
         }
+        
     }
 
     private static void wait_and_merge(int nServer, List<String> ips) {
@@ -241,38 +252,6 @@ public class Master {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-    
-    private static void readAllFilesInDirectory(int n_server, List<String> lines, String dirPath, int n_files, String[] files) throws IOException {    
-        int fileCounter = 0;
-
-        try (Stream<Path> paths = Files.walk(Paths.get(dirPath))) {
-            // Filter only regular files that end with .warc.wet
-            for (Path p : (Iterable<Path>) paths.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".warc.wet"))::iterator) {
-                if (fileCounter >= n_files) {
-                    break;
-                }
-
-                System.out.println("Processing file: " + p);
-                StringBuilder contentBuilder = new StringBuilder();
-                try {
-                    contentBuilder.append(new String(Files.readAllBytes(p)));
-                } catch (IOException e) {
-                    System.out.println("Error reading file: " + p);
-                    e.printStackTrace();
-                    continue; // Skip to the next file if an error occurs
-                }
-
-                String[] filenames = p.getFileName().toString().split("/");
-                String filename = filenames[filenames.length - 1];
-                files[fileCounter] = filename;
-
-                saveFile(n_server, lines, ftpClient, filename, contentBuilder.toString().replace("\n", " "));
-
-                fileCounter++;
-            }
-        }
-    return ;
     }
 
     private static void wait_for_reduce_send_groups(int n_server, List<String> lines) {
@@ -409,6 +388,7 @@ public class Master {
             e.printStackTrace();
         }
     }
+    
     private static void ask_for_shuffle( int n_server, List<String> lines) {
         try {
             System.out.println("n_server: " + n_server);
@@ -453,43 +433,69 @@ public class Master {
         }
     }
 
-    
+    private static void readAllFilesInDirectory(int n_server, List<String> lines, String dirPath, int n_files, String[] files) throws IOException {
+        int fileCounter = 0;
 
-    //save the file splitting the file into n parts and saving them into the n servers on the list
-    private static void saveFile(int n_server, List<String> lines, MyFTPClient ftpClient, String filename, String content){
+        try (Stream<Path> paths = Files.walk(Paths.get(dirPath))) {
+            // Filter only regular files that end with .warc.wet
+            for (Path p : (Iterable<Path>) paths.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".warc.wet"))::iterator) {
+                if (fileCounter >= n_files) {
+                    break;
+                }
+
+                System.out.println("Processing file: " + p);
+                StringBuilder[] contents = new StringBuilder[n_server];
+                for (int i = 0; i < n_server; i++) {
+                    contents[i] = new StringBuilder();
+                }
+
+                try (BufferedReader reader = Files.newBufferedReader(p)) {
+                    String line;
+                    int lineNumber = 0;
+                    while ((line = reader.readLine()) != null) {
+                        line = line.trim();
+                        line = line.replaceAll("\\s+", " ");
+                        line = line.replaceAll("\n", " ");
+                        // Distribute each line to a different server
+                        contents[lineNumber % n_server].append(line).append(" ");
+                        lineNumber++;
+                    }
+                } catch (IOException e) {
+                    System.out.println("Error reading file: " + p);
+                    e.printStackTrace();
+                    continue; // Skip to the next file if an error occurs
+                }
+
+                String[] filenames = p.getFileName().toString().split("/");
+                String filename = filenames[filenames.length - 1];
+                files[fileCounter] = filename;
+
+                // Save the distributed content to the servers
+                saveFile(n_server, lines, filename, contents);
+
+                fileCounter++;
+            }
+        }
+    }
+
+    private static void saveFile(int n_server, List<String> lines, String filename, StringBuilder[] contents) {
         try {
             System.out.println("n_server: " + n_server);
-             String[] words = content.split(" ");
+
             for (int i = 0; i < n_server; i++) {
                 String line = lines.get(i);
                 String[] parts = line.split(":");
                 String server = parts[0];
-                int port = Integer.parseInt(parts[1]);
-                port += 100;
-                // Total length of the content
-                int totalLength = content.length();
+                int port = Integer.parseInt(parts[1]) + 100;
 
-                // Calculate the start and end indices for the current server
-                int startIndex = i * totalLength / n_server;
-                int endIndex = (i + 1) * totalLength / n_server;
-
-                // Ensure endIndex does not exceed the length of the content
-                if (endIndex > totalLength) {
-                    endIndex = totalLength;
-                }
-
-                // Extract the substring for the current server
-                String content_s = content.substring(startIndex, endIndex);
-
-                //System.out.println("saving "+content_s );
-                ftpClient.saveFileOnServer(server, port, filename, content_s, n_server, i);
+                // Save the content chunk on the server
+                MyFTPClient ftpClient = new MyFTPClient(); // Assuming you have an FTP client class
+                ftpClient.saveFileOnServer(server, port, filename, contents[i].toString(), n_server, i);
             }
-
         } catch (Exception e) {
             System.out.println("Error saving file");
             e.printStackTrace();
         }
-
     }
 
     //retrieve the file from the servers and merge them

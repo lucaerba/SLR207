@@ -7,6 +7,7 @@ set todeploy "Simple.py"
 set remoteFolder "/dev/shm/$login/"
 set computers [split [exec cat machine_simple.txt] "\n"]
 
+
 foreach c $computers {
   # SSH to the remote computer and prepare the remote folder
   spawn ssh $login@$c "lsof -ti | xargs kill -9 2>/dev/null; rm -rf $remoteFolder; mkdir -p $remoteFolder"
@@ -22,8 +23,8 @@ foreach c $computers {
   # Debugging: Print the command to check correctness
   puts "ssh $login@$c \"$remote_command\""
 
-  # Open a new gnome-terminal tab and execute the command
-  exec wt.exe new-tab --title "Simple Execution on $c" -- wsl bash -c "ssh $login@$c \\\"$remote_command\\\""
+  # Open a new macOS Terminal tab and execute the command
+  exec osascript -e "tell application \"Terminal\" to do script \"ssh $login@$c \\\"$remote_command\\\"\""
 }
 
 wait

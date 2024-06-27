@@ -19,7 +19,9 @@ def process_files(n_files):
             with open(os.path.join(folder, file), "r") as f:
                 print("Reading file: " + file)
                 for line in f:
-                    line.replace("\n", "")
+                    line.replace("\n", " ")
+                    #trim the line
+                    line = line.strip()
                     words = line.split(" ")
                     for word in words:
                         if word in word_count_map:

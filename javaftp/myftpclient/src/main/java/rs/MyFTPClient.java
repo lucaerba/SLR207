@@ -23,10 +23,9 @@ public class MyFTPClient {
             ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
             // Code to save file, take just the bytes you take care of (i.e. the i-th part)
-            ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes());
 
             System.out.println("Uploading file to server " + server + " part " + (i+1) + " of " + nServer);
-            ftpClient.storeFile(filename , inputStream);
+            ftpClient.storeFile(filename , new ByteArrayInputStream(content.getBytes()));
             int errorCode = ftpClient.getReplyCode();
 
             if (errorCode != 226) {

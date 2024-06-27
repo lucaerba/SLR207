@@ -43,7 +43,7 @@ public class MyFTPClient {
                         .filter(entry -> (abs(entry.getKey().hashCode() % nServer) )== finalI)
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-                saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename+i, serializeMap(newresult));
+                saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename+server_index, serializeMap(newresult));
             }
         }
 
@@ -75,7 +75,7 @@ public class MyFTPClient {
             // Code to save file, take just the bytes you take care of (i.e. the i-th part)
             ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes());
 
-            System.out.println("Uploading file to server " + server);
+            System.out.println("Uploading file "+ filename +" to server " + server);
             ftpClient.storeFile(filename , inputStream);
             int errorCode = ftpClient.getReplyCode();
 
