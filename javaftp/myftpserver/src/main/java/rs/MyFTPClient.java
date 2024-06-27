@@ -6,9 +6,12 @@ import org.apache.commons.net.ftp.FTPFile;
 
 import java.io.*;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static java.lang.Math.abs;
 
 public class MyFTPClient {
     private final static String username = "toto";
@@ -20,22 +23,30 @@ public class MyFTPClient {
         ftpClient = new FTPClient();
         this.ips = ips;
     }
-
-    public void saveResultsOnServers_hash(String filename, Map<String, Integer> result, int server_index) {
+    public static String serializeMap(Map<String, Integer> map) {
+        return map.entrySet()
+                .stream()
+                .map(entry -> entry.getKey() + " " + entry.getValue())
+                .collect(Collectors.joining("\n"));
+    }
+    public void saveResultsOnServers_hash(List<String> filenames, Map<String, Integer> result, int server_index) {
         final int nServer = ips.length;
 
-        for (int i = 0; i < nServer; i++) {
-            if(i == server_index) continue;
-            //split ip port
-            String[] ipPort = ips[i].split(":");
-            //, send just the words with the hash % n_server == i
-            int finalI = i;
-            Map<String, Integer> newresult = result.entrySet().stream()
-                    .filter(entry -> (entry.getKey().hashCode() % nServer) == finalI)
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                    
-            saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename, newresult.toString());
+        for(String filename: filenames){
+            for (int i = 0; i < nServer; i++) {
+                if(i == server_index) continue;
+                //split ip port
+                String[] ipPort = ips[i].split(":");
+                //, send just the words with the hash % n_server == i
+                int finalI = i;
+                Map<String, Integer> newresult = result.entrySet().stream()
+                        .filter(entry -> (abs(entry.getKey().hashCode() % nServer) )== finalI)
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+                saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename+i, serializeMap(newresult));
+            }
         }
+
     }
     public void saveResultsOnServers_range(String filename, Map<String, Integer> result, int server_index, int ranges[]) {
         final int nServer = ips.length;
@@ -50,7 +61,7 @@ public class MyFTPClient {
                     .filter(entry -> (entry.getValue() >= ranges[finalI] && entry.getValue() < ranges[finalI+1]))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                     
-            saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename, newresult.toString());
+            saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename, serializeMap(newresult));
         }
     }
     //save your part of the file on the server, taking into account the number of servers and the server number

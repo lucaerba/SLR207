@@ -2,85 +2,128 @@ package rs;
 
 import java.io.*;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 
 public class Master {
     private final static String SERVER_LIST = "server_list.txt";
     private static final String MAP_MSG = "MAP";
+    private static final String SHUFFLE_MSG = "SHUFFLE";
 
     private static MyFTPClient ftpClient = null;
 
     public static void main(String[] args) {
         //create a timer to mesure the execution time and the different subtimes
-        long startTime, splitTime, ipsTime, map1Time, map2Time, reduceTime, shuffleTime, reduce2Time, endTime;
+        long time, time_before, startTime, splitTime, ipsTime, map1Time, map2Time, reduceTime, shuffleTime, reduce2Time, endTime;
         startTime = System.currentTimeMillis();
         int n_server = 0;
         List<String> lines = null;
+        int n_files = 1;
+        //int n_files = args.length > 0 ? Integer.parseInt(args[0]) : 1;
+        n_server = 3;
+        //just read n_machines from the server_list
         try (BufferedReader reader = new BufferedReader(new FileReader(SERVER_LIST))) {
             lines = reader.lines().collect(Collectors.toList());
-            n_server = lines.size();
+            lines = lines.subList(0, n_server);
+
         } catch (IOException e1) {
             // TODO Auto-generated catch block
             e1.printStackTrace();
         }
         //start the timer
-        String filename = "bonjour.txt";
-        List<Map.Entry<String, Integer>> results = null;
+        
 
+        String dirPath = "/cal/commoncrawl";
+        List<Map.Entry<String, Integer>> results = null;
         ftpClient = new MyFTPClient();
         try {
-            boolean fileExists = false;
-            
-            //fileExists = checkFileExists(ftpClient, filename);
+            //boolean filesExist = checkFileExists(ftpClient, dirPath);
+            boolean filesExist = false;
+            String[] filenames = new String[n_files];
+            if (!filesExist) {
+                System.out.println("Files do not exist. Creating and splitting files.");
 
-            if (!fileExists) {
-                System.out.println("File does not exist. Creating file.");
-
-                String content = "Talent she for lively eat led sister. Entrance strongly packages she out rendered get quitting denoting led. Dwelling confined improved it he no doubtful raptures. Several carried through an of up attempt gravity. Situation to be at offending elsewhere distrusts if. Particular use for considered projection cultivated. Worth of do doubt shall it their. Extensive existence up me contained he pronounce do. Excellence inquietude assistance precaution any impression man sufficient. Call park out she wife face mean. Invitation excellence imprudence understood it continuing to. Ye show done an into. Fifteen winding related may hearted colonel are way studied. County suffer twenty or marked no moment in he. Meet shew or said like he. Valley silent cannot things so remain oh to elinor. Far merits season better tended any age hunted.";
-
-                saveFile(n_server, lines, ftpClient, filename, content);
+                readAllFilesInDirectory( n_server, lines, dirPath, n_files, filenames);
+                
             }
             splitTime = System.currentTimeMillis()-startTime;
             System.out.println("file split: " + splitTime + "ms");
 
             //send ip addresses to the others
             //nserver
+            time_before = System.currentTimeMillis();
             send_ips(n_server, lines);
-            ipsTime = System.currentTimeMillis()-startTime-splitTime;
+            time = System.currentTimeMillis();
+            ipsTime = time - time_before;
             System.out.println("ips sent: " + ipsTime + "ms");
 
+            time_before = System.currentTimeMillis();
             //socket to start mapping process
-            ask_for_mapping(n_server, lines, filename);
+            ask_for_mapping(n_server, lines, filenames);
 
             //wait for results
-            wait_for_mapping(n_server);
-            map1Time = System.currentTimeMillis()-startTime-ipsTime;
+            wait_for_mapping(n_server, filenames);
+
+
+            ask_for_shuffle(n_server, lines);
+            //wait for results
+            wait_for_shuffle(n_server, lines, "SHUFFLE FINISHED");
+
+            time = System.currentTimeMillis();
+            map1Time = time - time_before;
             System.out.println("mapping done: " + map1Time + "ms");
 
+            time_before = System.currentTimeMillis();
             ask_for_reduce(n_server, lines);
 
             wait_for_reduce_send_groups(n_server, lines);
-            reduceTime = System.currentTimeMillis()-startTime-map1Time;
+            time = System.currentTimeMillis();
+            reduceTime = time - time_before;
             System.out.println("reduce done: " + reduceTime + "ms");
 
-            wait_for_shuffle(n_server, lines);
-            shuffleTime = System.currentTimeMillis()-startTime-reduceTime;
+            time_before = System.currentTimeMillis();
+            wait_for_shuffle(n_server, lines, "SHUFFLE2 FINISHED");
+            time = System.currentTimeMillis();
+            shuffleTime = time - time_before;
             System.out.println("shuffle done: " + shuffleTime + "ms");
 
+            time_before = System.currentTimeMillis();
             ask_for_reduce2(n_server, lines);
-            reduce2Time = System.currentTimeMillis()-startTime-shuffleTime;
+            time = System.currentTimeMillis();
+            reduce2Time = time - time_before;
             System.out.println("reduce2 done: " + reduce2Time + "ms");
 
+            time_before = System.currentTimeMillis();
             wait_and_merge(n_server, lines);
-            endTime = System.currentTimeMillis()-startTime-reduce2Time;
+            time = System.currentTimeMillis();
+            endTime = time - time_before;
             System.out.println("merge done: " + endTime + "ms");
 
             // Code to retrieve and display file content
             //System.out.println("File exists. Displaying file content.");
-           
+            //append to the time file the times
+            try {
+                FileWriter writer = new FileWriter("times.txt", true);
+                writer.write("n_files: " + n_files +"\n");
+                writer.write("split: " + splitTime + "\n");
+                writer.write("ips: " + ipsTime + "\n");
+                writer.write("map1: " + map1Time + "\n");
+                writer.write("reduce: " + reduceTime + "\n");
+                writer.write("shuffle: " + shuffleTime + "\n");
+                writer.write("reduce2: " + reduce2Time + "\n");
+                writer.write("merge: " + endTime + "\n");
+                writer.write("total time: " + (endTime + reduce2Time + shuffleTime + reduceTime + map1Time + ipsTime + splitTime) + "\n");
+                writer.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -94,36 +137,64 @@ public class Master {
  
             ServerSocket socket = new ServerSocket(1234);
             File file = new File("output.txt");
-            FileWriter writer = new FileWriter(file);
+            FileWriter writer = new FileWriter(file, false);
 
             for (int i = 0; i < nServer; i++) {
-                while(true) {
-                    Socket s = socket.accept();
-                    //check that the ip is the i of the list to get the data in order
-                    if(s.getInetAddress().toString().equals(ips.get(i).split(":")[0])){
-                        BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
-                        String msg = is.readLine();
-                        System.out.println("msg: " + msg);
-                        if (msg.contains("FINISHED")) {
-                            System.out.println("Server " + s.getInetAddress() + " finished reduce2");
-                        
-                            while((msg=is.readLine()) != null){
+                boolean processed = false;
+                while (!processed) {
+                    Socket clientSocket = socket.accept();
+
+                    System.out.println("clientIp: " + clientSocket.getInetAddress().getHostName());
+                    //clientIp: tp-1d23-21.enst.fr , just keep until the first dot
+                    String clientIp = clientSocket.getInetAddress().getHostName().split("\\.")[0];
+                    String expectedIp = ips.get(i).split(":")[0];
+
+                    // Check if the IP matches the expected order
+                    if (clientIp.equals(expectedIp)) {
+
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+                        System.out.println("Processing messages from server: " + clientIp);
+                        //send to socket OK
+                        BufferedWriter writer2 = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
+                        writer2.write("OK");
+                        writer2.newLine();
+                        writer2.flush();
+
+                        String msg;
+                        while ((msg = reader.readLine()) != null) {
                             
-                                writer.write(msg);
-                                System.out.println(msg);
+                            System.out.println("msg: " + msg);
+                            if (msg.contains("FINISHED")) {
+                                System.out.println("Server " + clientIp + " finished reduce2");
+                                processed = true;
+                                while((msg=reader.readLine()) != null ){
+                                    //System.out.println("msg: " + msg);
+                                    writer.write(msg);
+                                    if(!msg.equals("\n")){
+                                        writer.write("\n");
+                                    }
+                                }
+                                writer.flush();
+                                break;
                             }
-                            // Close the socket after processing
-                            s.close();
-                            break;
                         }
-                    }else{
-                        s.close();
+                        reader.close();
+                        clientSocket.close();
+                        writer2.close();
+                    } else {
+                        System.out.println("Unexpected server: " + clientIp + ", expected: " + expectedIp);
+                        BufferedWriter writer2 = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
+                        writer2.write("KO");
+                        writer2.close();
+                        clientSocket.close();
                     }
-                    
                 }
             }
+
             socket.close();
             writer.close();
+            file.createNewFile();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -147,7 +218,7 @@ public class Master {
         }
     }
 
-    private static void wait_for_shuffle(int n_server, List<String> lines) {
+    private static void wait_for_shuffle(int n_server, List<String> lines, String MSG) {
         //wait for the n_server to send the shuffle2 finished
         try {
             System.out.println("n_server: " + n_server);
@@ -159,7 +230,7 @@ public class Master {
                     Socket s = socket.accept();
                     BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
                     String msg = is.readLine();
-                    if (msg.contains("SHUFFLE2 FINISHED")) {
+                    if (msg.contains(MSG)) {
                         System.out.println("Server " + s.getInetAddress() + " finished shuffle2");
                         break;
                     }
@@ -170,6 +241,38 @@ public class Master {
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+    
+    private static void readAllFilesInDirectory(int n_server, List<String> lines, String dirPath, int n_files, String[] files) throws IOException {    
+        int fileCounter = 0;
+
+        try (Stream<Path> paths = Files.walk(Paths.get(dirPath))) {
+            // Filter only regular files that end with .warc.wet
+            for (Path p : (Iterable<Path>) paths.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".warc.wet"))::iterator) {
+                if (fileCounter >= n_files) {
+                    break;
+                }
+
+                System.out.println("Processing file: " + p);
+                StringBuilder contentBuilder = new StringBuilder();
+                try {
+                    contentBuilder.append(new String(Files.readAllBytes(p)));
+                } catch (IOException e) {
+                    System.out.println("Error reading file: " + p);
+                    e.printStackTrace();
+                    continue; // Skip to the next file if an error occurs
+                }
+
+                String[] filenames = p.getFileName().toString().split("/");
+                String filename = filenames[filenames.length - 1];
+                files[fileCounter] = filename;
+
+                saveFile(n_server, lines, ftpClient, filename, contentBuilder.toString().replace("\n", " "));
+
+                fileCounter++;
+            }
+        }
+    return ;
     }
 
     private static void wait_for_reduce_send_groups(int n_server, List<String> lines) {
@@ -208,9 +311,10 @@ public class Master {
         //got the range of fmin and fmax, divide the range into n_server groups {fmin, n_server-1 groups} and send all the groups to all the machines
         int[] ranges = new int[n_server+1];
         ranges[0] = fmin_min;
+        ranges[1] = fmin_min+1;
         ranges[n_server] = fmax_max+1;
-        int range = (fmax_max - fmin_min+1) / n_server;
-        for (int i = 1; i < n_server; i++) {
+        int range = (fmax_max - fmin_min - 2) / n_server;
+        for (int i = 2; i < n_server; i++) {
             ranges[i] = ranges[i-1] + range ;
         }
         String msg = "GROUPS ";
@@ -284,7 +388,28 @@ public class Master {
         }
     }
     //list the servers, connect to the socket, (port + 100) and ask to do mapping
-    private static void ask_for_mapping( int n_server, List<String> lines, String filename) {
+    private static void ask_for_mapping( int n_server, List<String> lines, String[] files) {
+        try {
+            System.out.println("n_server: " + n_server);
+            String line = null;
+            MySocketClient socket = new MySocketClient();
+            for(String file : files){
+                for (int i = 0; i < n_server; i++) {
+                    line = lines.get(i);
+                    String[] parts = line.split(":");
+                    String server = parts[0];
+                    int port = Integer.parseInt(parts[1]);
+                    System.out.println("Asking server " + server + " to do mapping on port " + port);
+
+                    //create a socket to connect to the server
+                    socket.sendMsgToServer(server, port, MAP_MSG + " " + file);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    private static void ask_for_shuffle( int n_server, List<String> lines) {
         try {
             System.out.println("n_server: " + n_server);
             String line = null;
@@ -295,25 +420,22 @@ public class Master {
                 String[] parts = line.split(":");
                 String server = parts[0];
                 int port = Integer.parseInt(parts[1]);
-                System.out.println("Asking server " + server + " to do mapping on port " + port);
+                System.out.println("Asking server " + server + " to do shuffle on port " + port);
 
-                String file_part = filename + "_" + i + "_" + n_server;
                 //create a socket to connect to the server
-                socket.sendMsgToServer(server, port, MAP_MSG + " " + file_part);
+                socket.sendMsgToServer(server, port, SHUFFLE_MSG );
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private static void wait_for_mapping(int n_server) {
+    private static void wait_for_mapping(int n_server, String[] files) {
         try {
             System.out.println("n_server: " + n_server);
-            String line = null;
-            boolean first = true;
             ServerSocket socket = new ServerSocket(1234);
 
-            for (int i = 0; i < n_server; i++) {
+            for (int i = 0; i < n_server*files.length; i++) {
                 while(true) {
                     Socket s = socket.accept();
                     BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
@@ -337,36 +459,34 @@ public class Master {
     private static void saveFile(int n_server, List<String> lines, MyFTPClient ftpClient, String filename, String content){
         try {
             System.out.println("n_server: " + n_server);
-            String[] content_parts = new String[n_server];
-            String[] words = content.split(" ");
-
-            int n_words = words.length;
-            int n_words_per_server = n_words / n_server;
-
-            for (int i = 0; i < n_server; i++) {
-                int start = i * n_words_per_server;
-                int end = (i == n_server-1) ? n_words : start + n_words_per_server;
-                if (i == n_server-1) {
-                    content_parts[i] = String.join(" ", words).substring(start);
-                } else {
-                    content_parts[i] = String.join(" ", words).substring(start, end);
-                }
-            }
-
+             String[] words = content.split(" ");
             for (int i = 0; i < n_server; i++) {
                 String line = lines.get(i);
-                System.out.println("line: " + line);
                 String[] parts = line.split(":");
                 String server = parts[0];
                 int port = Integer.parseInt(parts[1]);
                 port += 100;
-                //take just the content we are responsible for taking all the i+n words
-                
-                System.out.println("saving " + content_parts[i]);
-                ftpClient.saveFileOnServer(server, port, filename, content_parts[i], n_server, i);
+                // Total length of the content
+                int totalLength = content.length();
+
+                // Calculate the start and end indices for the current server
+                int startIndex = i * totalLength / n_server;
+                int endIndex = (i + 1) * totalLength / n_server;
+
+                // Ensure endIndex does not exceed the length of the content
+                if (endIndex > totalLength) {
+                    endIndex = totalLength;
+                }
+
+                // Extract the substring for the current server
+                String content_s = content.substring(startIndex, endIndex);
+
+                //System.out.println("saving "+content_s );
+                ftpClient.saveFileOnServer(server, port, filename, content_s, n_server, i);
             }
 
         } catch (Exception e) {
+            System.out.println("Error saving file");
             e.printStackTrace();
         }
 

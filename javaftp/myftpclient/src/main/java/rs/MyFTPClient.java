@@ -26,7 +26,7 @@ public class MyFTPClient {
             ByteArrayInputStream inputStream = new ByteArrayInputStream(content.getBytes());
 
             System.out.println("Uploading file to server " + server + " part " + (i+1) + " of " + nServer);
-            ftpClient.storeFile(filename + "_" + i + "_" + nServer, inputStream);
+            ftpClient.storeFile(filename , inputStream);
             int errorCode = ftpClient.getReplyCode();
 
             if (errorCode != 226) {

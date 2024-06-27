@@ -19,35 +19,100 @@ public class MySocketClient {
 
     //method to send a message to the server
     public void sendMsgToServer(String server, int port, String msg) {
-        //create a socket to connect to the server
-
         boolean connected = false;
         Socket socket = null;
-        boolean first = true;
+
         while (!connected) {
-            try{
+            try {
                 socket = new Socket(server, port);
-                //create a buffered writer to write to the server
-                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-                //write the message to the server  
-                writer.write(msg);
-                writer.newLine();
-                writer.flush();
-                //close the writer
-                writer.close();
-        
-                connected = true;
-                socket.close();
-            } catch (ConnectException e) {
-                if (first) {
-                    first = false;
-                    System.out.println("Connection refused. Retrying...");
+                if (socket.isConnected()) {
+                   
+                    // Use try-with-resources to ensure writer is closed properly
+                    try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
+                        writer.write(msg);
+                        writer.newLine();
+                        writer.flush();
+                    }
+
+                    connected = true; // Message sent successfully
                 }
-            } catch (Exception e) {
-                //e.printStackTrace();
+            } catch (ConnectException e) {
+                System.out.println("Connection refused. Retrying...");
+                try {
+                    Thread.sleep(1000); // Wait 1 second before retrying
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    System.out.println("Retry interrupted");
+                    return;
+                }
+            } catch (IOException e) {
+                System.out.println("Error: " + e.getMessage());
+                connected = false;
+            }  finally {
+                // Ensure the socket is closed properly
+                if (socket != null && !socket.isClosed()) {
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        System.out.println("Error closing socket: " + e.getMessage());
+                    }
+                }
             }
         }
+    }
 
+    public void sendMsgToServerOrder(String server, int port, String msg) {
+        boolean connected = false;
+        Socket socket = null;
+
+        while (!connected) {
+            try {
+                socket = new Socket(server, port);
+                if (socket.isConnected()) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                    String ok = reader.readLine();
+                    while (ok == null) {
+                        ok = reader.readLine();
+                    }
+                    System.out.println("Received: " + ok);
+                    if ("OK".equals(ok)) {
+                        System.out.println("Server ready. Sending message...");
+                        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()))) {
+                            writer.write(msg);
+                            writer.newLine();
+                            writer.flush();
+                        }
+                        connected = true; // Message sent successfully
+                        System.out.println("Message sent successfully");
+                        socket.close();
+                    }else {
+                        socket.close();
+                        System.out.println("Server not ready. Retrying...");
+                        Thread.sleep(200);
+                    }
+                }else {
+                    socket.close();
+                    System.out.println("Server not ready. Retrying...");
+                    Thread.sleep(200);
+                }
+            } catch (ConnectException e) {
+                System.out.println("Connection refused. Retrying...");
+                try {
+                    Thread.sleep(1000); // Wait 1 second before retrying
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    System.out.println("Retry interrupted");
+                    return;
+                }
+            } catch (IOException e) {
+                System.out.println("Error: " + e.getMessage());
+                connected = false;
+            } catch (InterruptedException e) {
+                System.out.println("Error: " + e.getMessage());
+                throw new RuntimeException(e);
+            }
+
+        }
     }
 
     //method to receive a message from the server
