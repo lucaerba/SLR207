@@ -74,7 +74,7 @@ public class Master {
             reduce2Time = System.currentTimeMillis()-startTime-shuffleTime;
             System.out.println("reduce2 done: " + reduce2Time + "ms");
 
-            wait_and_merge(n_server);
+            wait_and_merge(n_server, lines);
             endTime = System.currentTimeMillis()-startTime-reduce2Time;
             System.out.println("merge done: " + endTime + "ms");
 
@@ -87,7 +87,7 @@ public class Master {
         }
     }
 
-    private static void wait_and_merge(int nServer) {
+    private static void wait_and_merge(int nServer, List<String> ips) {
         //wait for all the results to arrive and merge them into a single list to create a file with that
         try {
             System.out.println("n_server: " + nServer);
@@ -99,22 +99,29 @@ public class Master {
             for (int i = 0; i < nServer; i++) {
                 while(true) {
                     Socket s = socket.accept();
-                    BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
-                    String msg = is.readLine();
-                    System.out.println("msg: " + msg);
-                    if (msg.contains("FINISHED")) {
-                        System.out.println("Server " + s.getInetAddress() + " finished reduce2");
-                       
-                        while((msg=is.readLine()) != null){
+                    //check that the ip is the i of the list to get the data in order
+                    if(s.getInetAddress().toString().equals(ips.get(i).split(":")[0])){
+                        BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
+                        String msg = is.readLine();
+                        System.out.println("msg: " + msg);
+                        if (msg.contains("FINISHED")) {
+                            System.out.println("Server " + s.getInetAddress() + " finished reduce2");
                         
-                            writer.write(msg);
-                            System.out.println(msg);
+                            while((msg=is.readLine()) != null){
+                            
+                                writer.write(msg);
+                                System.out.println(msg);
+                            }
+                            // Close the socket after processing
+                            s.close();
+                            break;
                         }
-                        break;
+                    }else{
+                        s.close();
                     }
+                    
                 }
             }
-
             socket.close();
             writer.close();
         } catch (Exception e) {
@@ -204,7 +211,7 @@ public class Master {
         ranges[n_server] = fmax_max+1;
         int range = (fmax_max - fmin_min+1) / n_server;
         for (int i = 1; i < n_server; i++) {
-            ranges[i] = ranges[i-1] + range;
+            ranges[i] = ranges[i-1] + range ;
         }
         String msg = "GROUPS ";
         System.out.println("Ranges: ");
@@ -330,6 +337,21 @@ public class Master {
     private static void saveFile(int n_server, List<String> lines, MyFTPClient ftpClient, String filename, String content){
         try {
             System.out.println("n_server: " + n_server);
+            String[] content_parts = new String[n_server];
+            String[] words = content.split(" ");
+
+            int n_words = words.length;
+            int n_words_per_server = n_words / n_server;
+
+            for (int i = 0; i < n_server; i++) {
+                int start = i * n_words_per_server;
+                int end = (i == n_server-1) ? n_words : start + n_words_per_server;
+                if (i == n_server-1) {
+                    content_parts[i] = String.join(" ", words).substring(start);
+                } else {
+                    content_parts[i] = String.join(" ", words).substring(start, end);
+                }
+            }
 
             for (int i = 0; i < n_server; i++) {
                 String line = lines.get(i);
@@ -339,13 +361,9 @@ public class Master {
                 int port = Integer.parseInt(parts[1]);
                 port += 100;
                 //take just the content we are responsible for taking all the i+n words
-                String content_part = "";
-                String[] words = content.split(" ");
-                for (int j = i; j < words.length; j += n_server) {
-                    content_part += words[j] + " ";
-                }
-                System.out.println("saving " + content_part);
-                ftpClient.saveFileOnServer(server, port, filename, content_part, n_server, i);
+                
+                System.out.println("saving " + content_parts[i]);
+                ftpClient.saveFileOnServer(server, port, filename, content_parts[i], n_server, i);
             }
 
         } catch (Exception e) {
