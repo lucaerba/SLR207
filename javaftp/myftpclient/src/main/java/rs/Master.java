@@ -21,7 +21,7 @@ public class Master {
 
     public static void main(String[] args) {
         for(int i=2; i<14; i+=1){
-            for(int j=1; j<8; j+=1){
+            for(int j=1; j<6; j+=1){
 
                 System.out.println("---- n_server: " + i + " n_files: " + j+ " ----");
                //create a timer to mesure the execution time and the different subtimes
