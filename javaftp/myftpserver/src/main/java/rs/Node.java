@@ -34,24 +34,36 @@ public class Node {
     public static void deserializeMap(String serializedMap, Map<String, Integer> res) {
         String[] keyValuePairs = serializedMap.split("\n");
         for (String pair : keyValuePairs) {
-            //System.out.println("Pair: " + pair);
+            // Trim whitespace and skip empty lines
+            pair = pair.trim();
+            if (pair.isEmpty()) {
+                continue;
+            }
+            
+            // Debugging output to see the pair being processed
+            //System.out.println("Deserializing pair: " + pair);
+            
+            // Check for valid pairs
             if (pair.contains(" ")) {
                 String[] entry = pair.split(" ");
-                String key = entry[0].trim();
-                int value = Integer.parseInt(entry[1].trim());
-                // If exists, add the new value to the existing value
-                if (res.containsKey(key)) {
-                    res.put(key, res.get(key) + value);
+                if (entry.length == 2) {
+                    try {
+                        String key = entry[0];
+                        int value = Integer.parseInt(entry[1]);
+                        // If exists, add the new value to the existing value
+                        res.put(key, res.getOrDefault(key, 0) + value);
+                    } catch (NumberFormatException e) {
+                        System.err.println("Des -> Invalid number format in pair: " + pair);
+                    }
                 } else {
-                    // If doesn't exist, just put the new value
-                    res.put(key, value);
+                    System.err.println("Des -> Invalid pair with multiple spaces or incorrect format: " + pair);
                 }
             } else {
-                System.err.println("Skipping invalid pair: " + pair);
+                System.err.println("Des -> Skipping invalid pair without space: " + pair);
             }
         }
-        return ;
     }
+    
 
     public static void main(String[] args) {
         ServerSocket listener = null;
@@ -64,7 +76,7 @@ public class Node {
         MyFTPClient ftpClient = null;
         String[] ips = null;
         String clientip = null;
-        int clientport = 1234;
+        int clientport = 12345;
         Map<String, Integer> result = null;
         int low_range, high_range; //[low_range, high_range)
         int server_index = -1;

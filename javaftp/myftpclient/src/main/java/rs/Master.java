@@ -5,6 +5,7 @@ import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -16,16 +17,17 @@ public class Master {
     private final static String SERVER_LIST = "server_list.txt";
     private static final String MAP_MSG = "MAP";
     private static final String SHUFFLE_MSG = "SHUFFLE";
-
+    private static int port = 12345;
     private static MyFTPClient ftpClient = null;
 
     public static void main(String[] args) {
-        for(int i=2; i<14; i+=1){
-            for(int j=1; j<6; j+=1){
+        ArrayList<Integer> file_dimensions = new ArrayList<Integer>();
 
+        for(int j=1; j<10; j+=1){
+            for(int i=2; i<15; i+=1){
                 System.out.println("---- n_server: " + i + " n_files: " + j+ " ----");
                //create a timer to mesure the execution time and the different subtimes
-                long time, time_before, startTime, splitTime, ipsTime, map1Time, map2Time, reduceTime, shuffleTime, shuffleTime1, reduce2Time, endTime;
+                long time, time_before, startTime, splitTime, ipsTime, map1Time, map2Time, reduceTime, shuffleTime, shuffleTime1, reduce2Time, endTime, synch1, synch2, synch3;
                 startTime = System.currentTimeMillis();
                 int n_server = i;
                 List<String> lines = null;
@@ -55,7 +57,15 @@ public class Master {
                         System.out.println("Files do not exist. Creating and splitting files.");
 
                         readAllFilesInDirectory( n_server, lines, dirPath, n_files, filenames);
-                        
+                        if(n_files > file_dimensions.size()){
+                            //calculate the size in MB of the missing file
+                            for(int k = file_dimensions.size(); k < n_files; k++){
+                                File file = new File(dirPath+"/"+filenames[k]);
+                                //get dim in MB
+                                file_dimensions.add((int)file.length() / (1024 * 1024));
+                            }
+
+                        }
                     }
                     splitTime = System.currentTimeMillis()-startTime;
                     System.out.println("file split: " + splitTime + "ms");
@@ -89,11 +99,21 @@ public class Master {
 
                     time_before = System.currentTimeMillis();
                     ask_for_reduce(n_server, lines);
+                    time = System.currentTimeMillis();
+                    synch1 = time - time_before;
+                    System.out.println("synch1 done: " + synch1 + "ms");
 
-                    wait_for_reduce_send_groups(n_server, lines);
+                    time_before = System.currentTimeMillis();
+                    int[] frequencies = wait_for_reduce(n_server, lines);
                     time = System.currentTimeMillis();
                     reduceTime = time - time_before;
                     System.out.println("reduce done: " + reduceTime + "ms");
+
+                    time_before = System.currentTimeMillis();
+                    send_groups(n_server, lines, frequencies[0], frequencies[1]);
+                    time = System.currentTimeMillis();
+                    synch2 = time - time_before;
+                    System.out.println("synch2 done: " + synch2 + "ms");
 
                     time_before = System.currentTimeMillis();
                     wait_for_shuffle(n_server, lines, "SHUFFLE2 FINISHED");
@@ -104,41 +124,45 @@ public class Master {
                     time_before = System.currentTimeMillis();
                     ask_for_reduce2(n_server, lines);
                     time = System.currentTimeMillis();
-                    reduce2Time = time - time_before;
-                    System.out.println("reduce2 done: " + reduce2Time + "ms");
+                    synch3 = time - time_before;
+                    System.out.println("synch3 done: " + synch3 + "ms");
 
                     time_before = System.currentTimeMillis();
                     wait_and_merge(n_server, lines);
                     time = System.currentTimeMillis();
-                    endTime = time - time_before;
-                    System.out.println("merge done: " + endTime + "ms");
+                    reduce2Time = time - time_before;
+                    System.out.println("reduce2 done: " + reduce2Time + "ms");
 
                     // Code to retrieve and display file content
                     //System.out.println("File exists. Displaying file content.");
                     //append to the time file the times
+                    int file_dim = 0;
+                    for(int k = 0; k < n_files; k++){
+                        file_dim += file_dimensions.get(k);
+                    }
                     try {
                         FileWriter writer = new FileWriter("times.txt", true);
-                        writer.write("---- n_server: " + n_server +" n_files: " + n_files +" ----\n");
+                        writer.write("----\n n_server: " + n_server +" n_files: " + n_files + " dim: " + file_dim + "\n");
                         writer.write("split: " + splitTime + "\n");
                         writer.write("ips: " + ipsTime + "\n");
                         writer.write("map1: " + map1Time + "\n");
                         writer.write("shuffle1: " + shuffleTime1 + "\n");
+                        writer.write("synch1: " + synch1 + "\n");
                         writer.write("reduce: " + reduceTime + "\n");
+                        writer.write("synch2: " + synch2 + "\n");
                         writer.write("shuffle: " + shuffleTime + "\n");
+                        writer.write("synch3: " + synch3 + "\n");
                         writer.write("reduce2: " + reduce2Time + "\n");
-                        writer.write("merge: " + endTime + "\n");
-                        writer.write("total time: " + (endTime + reduce2Time + shuffleTime + reduceTime + map1Time + ipsTime + splitTime + shuffleTime1) + "\n");
+                        writer.write("total time: " + (System.currentTimeMillis()-startTime) + "\n");
                         writer.close();
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
-
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
         }
-        
     }
 
     private static void wait_and_merge(int nServer, List<String> ips) {
@@ -146,7 +170,7 @@ public class Master {
         try {
             System.out.println("n_server: " + nServer);
  
-            ServerSocket socket = new ServerSocket(1234);
+            ServerSocket socket = new ServerSocket(port);
             File file = new File("output.txt");
             FileWriter writer = new FileWriter(file, false);
 
@@ -233,8 +257,7 @@ public class Master {
         //wait for the n_server to send the shuffle2 finished
         try {
             System.out.println("n_server: " + n_server);
-            String line = null;
-            ServerSocket socket = new ServerSocket(1234);
+            ServerSocket socket = new ServerSocket(port);
 
             for (int i = 0; i < n_server; i++) {
                 while(true) {
@@ -254,14 +277,14 @@ public class Master {
         }
     }
 
-    private static void wait_for_reduce_send_groups(int n_server, List<String> lines) {
+    private static int[] wait_for_reduce(int n_server, List<String> lines) {
         // wait all the fmin fmax from the servers, collect them and save fmin_min and fmax_max //msg format: fmin fmax
         int fmin_min = Integer.MAX_VALUE;
         int fmax_max = Integer.MIN_VALUE;
 
         ServerSocket socket = null;
         try {
-            socket = new ServerSocket(1234);
+            socket = new ServerSocket(port);
             for (int i = 0; i < n_server; i++) {
                 Socket s = socket.accept();
                 BufferedReader is = new BufferedReader(new InputStreamReader(s.getInputStream()));
@@ -287,36 +310,37 @@ public class Master {
                 e.printStackTrace();
             }
         }
-        //got the range of fmin and fmax, divide the range into n_server groups {fmin, n_server-1 groups} and send all the groups to all the machines
-        int[] ranges = new int[n_server+1];
-        ranges[0] = fmin_min;
-        ranges[1] = fmin_min+1;
-        ranges[n_server] = fmax_max+1;
-        int range = (fmax_max - fmin_min - 2) / n_server;
-        for (int i = 2; i < n_server; i++) {
-            ranges[i] = ranges[i-1] + range ;
-        }
-        String msg = "GROUPS ";
-        System.out.println("Ranges: ");
-        for (int j = 0; j < n_server+1; j++) {
-            msg += ranges[j] + " ";
-            System.out.println(ranges[j]);
-        }
-        try {
-            for (int i = 0; i < n_server; i++) {
-                String line = lines.get(i);
-                String[] parts = line.split(":");
-                String server = parts[0];
-                int port = Integer.parseInt(parts[1]);
-                MySocketClient send = new MySocketClient();
-                send.sendMsgToServer(server, port, msg);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-
-       
+        return new int[]{fmin_min, fmax_max};
+    }
+    private static void send_groups(int n_server, List<String> lines, int fmin_min, int fmax_max){
+           //got the range of fmin and fmax, divide the range into n_server groups {fmin, n_server-1 groups} and send all the groups to all the machines
+           int[] ranges = new int[n_server+1];
+           ranges[0] = fmin_min;
+           ranges[1] = fmin_min+1;
+           ranges[n_server] = fmax_max+1;
+           int range = (fmax_max - fmin_min - 2) / n_server;
+           for (int i = 2; i < n_server; i++) {
+               ranges[i] = ranges[i-1] + range ;
+           }
+           String msg = "GROUPS ";
+           System.out.println("Ranges: ");
+           for (int j = 0; j < n_server+1; j++) {
+               msg += ranges[j] + " ";
+               System.out.println(ranges[j]);
+           }
+           try {
+               for (int i = 0; i < n_server; i++) {
+                   String line = lines.get(i);
+                   String[] parts = line.split(":");
+                   String server = parts[0];
+                   int port = Integer.parseInt(parts[1]);
+                   MySocketClient send = new MySocketClient();
+                   send.sendMsgToServer(server, port, msg);
+               }
+           } catch (Exception e) {
+               e.printStackTrace();
+           }
+   
     }
 
     private static void ask_for_reduce(int n_server, List<String> lines) {
@@ -413,7 +437,7 @@ public class Master {
     private static void wait_for_mapping(int n_server, String[] files) {
         try {
             System.out.println("n_server: " + n_server);
-            ServerSocket socket = new ServerSocket(1234);
+            ServerSocket socket = new ServerSocket(port);
 
             for (int i = 0; i < n_server*files.length; i++) {
                 while(true) {
@@ -453,9 +477,9 @@ public class Master {
                     String line;
                     int lineNumber = 0;
                     while ((line = reader.readLine()) != null) {
-                        line = line.trim();
                         line = line.replaceAll("\\s+", " ");
                         line = line.replaceAll("\n", " ");
+                        line = line.trim();
                         // Distribute each line to a different server
                         contents[lineNumber % n_server].append(line).append(" ");
                         lineNumber++;

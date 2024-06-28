@@ -40,7 +40,7 @@ public class MyFTPClient {
                 //, send just the words with the hash % n_server == i
                 int finalI = i;
                 Map<String, Integer> newresult = result.entrySet().stream()
-                        .filter(entry -> (abs(entry.getKey().hashCode() % nServer) )== finalI)
+                        .filter(entry -> (abs(entry.getKey().hashCode() % nServer)) == finalI)
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
                 saveFileOnServer(ipPort[0], Integer.parseInt(ipPort[1])+100, filename+server_index, serializeMap(newresult));
